@@ -1,4 +1,5 @@
 # Yêu Cầu Phát Triển: Serene Health - Admin Dashboard (Flutter Web)
+# Toàn bộ giao diện trang web phải là tiếng Việt
 
 ## 1. Mục Tiêu Dự Án
 Xây dựng trang Web Admin Dashboard bằng Flutter cho nền tảng quản lý phòng khám Serene Health. 

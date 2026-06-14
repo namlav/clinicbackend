@@ -15,7 +15,7 @@ class PaymentModel {
     return PaymentModel(
       paymentid: json['paymentid'] as int,
       appointmentid: json['appointmentid'] as int,
-      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      amount: (json['totalamount'] as num?)?.toDouble() ?? 0.0,
       status: json['status'] as String? ?? 'Pending',
     );
   }
@@ -24,7 +24,7 @@ class PaymentModel {
     return {
       'paymentid': paymentid,
       'appointmentid': appointmentid,
-      'amount': amount,
+      'totalamount': amount,
       'status': status,
     };
   }
