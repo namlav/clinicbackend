@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:clinicbackend/services/supabase_service.dart';
 
 class ServiceManagementScreen extends StatefulWidget {
@@ -15,10 +16,31 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
   List<Map<String, dynamic>> _services = [];
   String _searchQuery = '';
 
+  RealtimeChannel? _realtimeChannel;
+
   @override
   void initState() {
     super.initState();
     _loadServices();
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    _realtimeChannel = SupabaseService.instance.client
+        .channel('public:service_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'services',
+          callback: (payload) => _loadServices(),
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _loadServices() async {
@@ -210,7 +232,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
         text: (service['price'] as num?)?.toString() ?? '0');
     final descriptionController =
         TextEditingController(text: service['description'] as String? ?? '');
-    bool isActive = service['is_active'] as bool? ?? true;
+    bool isActive = service['isactive'] as bool? ?? true;
     final formKey = GlobalKey<FormState>();
 
     final result = await showDialog<bool>(
@@ -598,7 +620,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                         ],
                         rows: _filteredServices.map((svc) {
                           final isActive =
-                              svc['is_active'] as bool? ?? true;
+                              svc['isactive'] as bool? ?? true;
                           final price =
                               (svc['price'] as num?)?.toDouble() ?? 0;
 

@@ -60,7 +60,9 @@ class SupabaseService {
 
   /// Count appointments within a date range
   Future<int> getAppointmentsCountByRange(
-      String startDate, String endDate) async {
+    String startDate,
+    String endDate,
+  ) async {
     final response = await client
         .from('appointments')
         .select('appointmentid')
@@ -104,13 +106,18 @@ class SupabaseService {
 
   /// Count active doctors
   Future<int> getActiveDoctorsCount() async {
-    final response = await client.from('doctors').select('doctorid');
+    final response = await client
+        .from('doctors')
+        .select('*, users!inner(isactive)')
+        .eq('users.isactive', true);
     return (response as List).length;
   }
 
   /// Get appointment counts grouped by date within a range
   Future<List<Map<String, dynamic>>> getAppointmentsByRange(
-      String startDate, String endDate) async {
+    String startDate,
+    String endDate,
+  ) async {
     final response = await client
         .from('appointments')
         .select('appointmentdate')
@@ -138,7 +145,9 @@ class SupabaseService {
 
   /// Get revenue grouped by date within a range
   Future<List<Map<String, dynamic>>> getRevenueByRangeGrouped(
-      String startDate, String endDate) async {
+    String startDate,
+    String endDate,
+  ) async {
     final response = await client
         .from('payments')
         .select('''
@@ -205,9 +214,9 @@ class SupabaseService {
 
   // ─── Doctor Methods ─────────────────────────────────────────────
 
-  /// Fetch all doctors
+  /// Fetch all doctors with their user status
   Future<List<Map<String, dynamic>>> getDoctorsWithStatus() async {
-    final response = await client.from('doctors').select('*');
+    final response = await client.from('doctors').select('*, users(isactive)');
     return List<Map<String, dynamic>>.from(response as List);
   }
 

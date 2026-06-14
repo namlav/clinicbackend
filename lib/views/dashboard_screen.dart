@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:clinicbackend/services/supabase_service.dart';
 
 /// Filter mode enum for the dashboard
@@ -31,10 +32,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
   DateTime _selectedDate = DateTime.now(); // for day/month/year
   DateTimeRange? _customRange; // for custom range
 
+  RealtimeChannel? _realtimeChannel;
+
   @override
   void initState() {
     super.initState();
     _loadDashboardData();
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    _realtimeChannel = SupabaseService.instance.client
+        .channel('public:dashboard_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'appointments',
+          callback: (payload) => _loadDashboardData(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'payments',
+          callback: (payload) => _loadDashboardData(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'users',
+          callback: (payload) => _loadDashboardData(),
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
   }
 
   // ─── Date Range Helpers ─────────────────────────────────────────

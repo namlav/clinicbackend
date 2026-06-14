@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:clinicbackend/services/supabase_service.dart';
 
 class UserManagementScreen extends StatefulWidget {
@@ -14,10 +15,31 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   String _searchQuery = '';
   String _roleFilter = 'all'; // 'all', 'doctor', 'patient'
 
+  RealtimeChannel? _realtimeChannel;
+
   @override
   void initState() {
     super.initState();
     _loadUsers();
+    _setupRealtime();
+  }
+
+  void _setupRealtime() {
+    _realtimeChannel = SupabaseService.instance.client
+        .channel('public:user_realtime')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'users',
+          callback: (payload) => _loadUsers(),
+        )
+        .subscribe();
+  }
+
+  @override
+  void dispose() {
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _loadUsers() async {
