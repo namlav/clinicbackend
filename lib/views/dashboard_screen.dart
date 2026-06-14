@@ -3,6 +3,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'package:clinicbackend/services/supabase_service.dart';
 
+/// Filter mode enum for the dashboard
+enum DateFilterMode { day, week, month, year, custom }
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -12,15 +15,21 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoading = true;
+  bool _isChartLoading = false;
 
   // Stats
-  int _todayAppointments = 0;
-  double _totalRevenue = 0;
+  int _filteredAppointments = 0;
+  double _filteredRevenue = 0;
   int _activeDoctors = 0;
 
   // Chart data
   List<Map<String, dynamic>> _chartData = [];
   bool _showRevenue = false; // false = appointments, true = revenue
+
+  // Date filter
+  DateFilterMode _filterMode = DateFilterMode.week;
+  DateTime _selectedDate = DateTime.now(); // for day/month/year
+  DateTimeRange? _customRange; // for custom range
 
   @override
   void initState() {
@@ -28,23 +37,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadDashboardData();
   }
 
+  // ─── Date Range Helpers ─────────────────────────────────────────
+
+  /// Calculate start & end dates based on the current filter mode
+  (String, String) _getDateRange() {
+    final now = DateTime.now();
+    switch (_filterMode) {
+      case DateFilterMode.day:
+        final d = _selectedDate.toIso8601String().split('T')[0];
+        return (d, d);
+      case DateFilterMode.week:
+        final start = _selectedDate.subtract(const Duration(days: 6));
+        return (
+          start.toIso8601String().split('T')[0],
+          _selectedDate.toIso8601String().split('T')[0],
+        );
+      case DateFilterMode.month:
+        final start = DateTime(_selectedDate.year, _selectedDate.month, 1);
+        final end = DateTime(_selectedDate.year, _selectedDate.month + 1, 0);
+        return (
+          start.toIso8601String().split('T')[0],
+          end.toIso8601String().split('T')[0],
+        );
+      case DateFilterMode.year:
+        final start = DateTime(_selectedDate.year, 1, 1);
+        final end = DateTime(_selectedDate.year, 12, 31);
+        return (
+          start.toIso8601String().split('T')[0],
+          end.toIso8601String().split('T')[0],
+        );
+      case DateFilterMode.custom:
+        if (_customRange != null) {
+          return (
+            _customRange!.start.toIso8601String().split('T')[0],
+            _customRange!.end.toIso8601String().split('T')[0],
+          );
+        }
+        // Fallback to last 7 days
+        final start = now.subtract(const Duration(days: 6));
+        return (
+          start.toIso8601String().split('T')[0],
+          now.toIso8601String().split('T')[0],
+        );
+    }
+  }
+
+  String _getFilterLabel() {
+    final df = DateFormat('dd/MM/yyyy');
+    switch (_filterMode) {
+      case DateFilterMode.day:
+        return df.format(_selectedDate);
+      case DateFilterMode.week:
+        final start = _selectedDate.subtract(const Duration(days: 6));
+        return '${df.format(start)} – ${df.format(_selectedDate)}';
+      case DateFilterMode.month:
+        return DateFormat('MM/yyyy').format(_selectedDate);
+      case DateFilterMode.year:
+        return '${_selectedDate.year}';
+      case DateFilterMode.custom:
+        if (_customRange != null) {
+          return '${df.format(_customRange!.start)} – ${df.format(_customRange!.end)}';
+        }
+        return 'Chọn khoảng thời gian';
+    }
+  }
+
+  // ─── Data Loading ───────────────────────────────────────────────
+
   Future<void> _loadDashboardData() async {
     setState(() => _isLoading = true);
     try {
       final service = SupabaseService.instance;
+      final (startDate, endDate) = _getDateRange();
+
       final results = await Future.wait([
-        service.getTodayAppointmentsCount(),
-        service.getTotalRevenue(),
+        service.getAppointmentsCountByRange(startDate, endDate),
+        service.getRevenueByRange(startDate, endDate),
         service.getActiveDoctorsCount(),
         _showRevenue
-            ? service.getRevenueLast7Days()
-            : service.getAppointmentsLast7Days(),
+            ? service.getRevenueByRangeGrouped(startDate, endDate)
+            : service.getAppointmentsByRange(startDate, endDate),
       ]);
 
       if (mounted) {
         setState(() {
-          _todayAppointments = results[0] as int;
-          _totalRevenue = results[1] as double;
+          _filteredAppointments = results[0] as int;
+          _filteredRevenue = results[1] as double;
           _activeDoctors = results[2] as int;
           _chartData = results[3] as List<Map<String, dynamic>>;
           _isLoading = false;
@@ -53,38 +131,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi tải dữ liệu: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        _showError('Lỗi tải dữ liệu: $e');
       }
     }
   }
 
   Future<void> _loadChartData() async {
+    setState(() => _isChartLoading = true);
     try {
       final service = SupabaseService.instance;
+      final (startDate, endDate) = _getDateRange();
       final data = _showRevenue
-          ? await service.getRevenueLast7Days()
-          : await service.getAppointmentsLast7Days();
-      if (mounted) setState(() => _chartData = data);
+          ? await service.getRevenueByRangeGrouped(startDate, endDate)
+          : await service.getAppointmentsByRange(startDate, endDate);
+      if (mounted) {
+        setState(() {
+          _chartData = data;
+          _isChartLoading = false;
+        });
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi tải biểu đồ: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        setState(() => _isChartLoading = false);
+        _showError('Lỗi tải biểu đồ: $e');
       }
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  // ─── Filter Picker Actions ─────────────────────────────────────
+
+  Future<void> _pickDay() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      locale: const Locale('vi', 'VN'),
+    );
+    if (picked != null) {
+      setState(() {
+        _filterMode = DateFilterMode.day;
+        _selectedDate = picked;
+      });
+      _loadDashboardData();
+    }
+  }
+
+  Future<void> _pickMonth() async {
+    // Show a date picker and use only year/month
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(_selectedDate.year, _selectedDate.month, 1),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      locale: const Locale('vi', 'VN'),
+    );
+    if (picked != null) {
+      setState(() {
+        _filterMode = DateFilterMode.month;
+        _selectedDate = DateTime(picked.year, picked.month, 1);
+      });
+      _loadDashboardData();
+    }
+  }
+
+  Future<void> _pickCustomRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: _customRange ??
+          DateTimeRange(
+            start: DateTime.now().subtract(const Duration(days: 30)),
+            end: DateTime.now(),
+          ),
+      locale: const Locale('vi', 'VN'),
+    );
+    if (picked != null) {
+      setState(() {
+        _filterMode = DateFilterMode.custom;
+        _customRange = picked;
+      });
+      _loadDashboardData();
     }
   }
 
@@ -118,21 +257,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── Welcome Header ─────────────────────────────────
-            Text(
-              'Xin chào, Quản trị viên 👋',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+            // ─── Header + Refresh ───────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Xin chào, Quản trị viên 👋',
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tổng quan hoạt động phòng khám',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                    ],
                   ),
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: _loadDashboardData,
+                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                  label: const Text('Làm mới'),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Tổng quan hoạt động phòng khám hôm nay',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
+
+            // ─── Date Filter Bar ────────────────────────────────
+            _buildFilterBar(colorScheme),
+            const SizedBox(height: 24),
 
             // ─── Stats Cards ────────────────────────────────────
             LayoutBuilder(
@@ -143,16 +303,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       _buildStatCard(
                         icon: Icons.calendar_month_rounded,
-                        label: 'Ca khám hôm nay',
-                        value: '$_todayAppointments',
+                        label: 'Ca khám thành công',
+                        value: '$_filteredAppointments',
                         color: const Color(0xFF0D9488),
                         bgColor: const Color(0xFFCCFBF1),
                       ),
                       const SizedBox(height: 16),
                       _buildStatCard(
                         icon: Icons.payments_rounded,
-                        label: 'Tổng doanh thu',
-                        value: _formatCurrency(_totalRevenue),
+                        label: 'Doanh thu',
+                        value: _formatCurrency(_filteredRevenue),
                         color: const Color(0xFF2563EB),
                         bgColor: const Color(0xFFDBEAFE),
                       ),
@@ -172,8 +332,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         icon: Icons.calendar_month_rounded,
-                        label: 'Ca khám hôm nay',
-                        value: '$_todayAppointments',
+                        label: 'Ca khám thành công',
+                        value: '$_filteredAppointments',
                         color: const Color(0xFF0D9488),
                         bgColor: const Color(0xFFCCFBF1),
                       ),
@@ -182,8 +342,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: _buildStatCard(
                         icon: Icons.payments_rounded,
-                        label: 'Tổng doanh thu',
-                        value: _formatCurrency(_totalRevenue),
+                        label: 'Doanh thu',
+                        value: _formatCurrency(_filteredRevenue),
                         color: const Color(0xFF2563EB),
                         bgColor: const Color(0xFFDBEAFE),
                       ),
@@ -212,6 +372,228 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // ─── Filter Bar ────────────────────────────────────────────────
+
+  Widget _buildFilterBar(ColorScheme colorScheme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 600;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.filter_list_rounded,
+                      size: 20, color: colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Bộ lọc thời gian',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer
+                            .withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _getFilterLabel(),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: colorScheme.primary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildFilterChip(
+                    label: 'Hôm nay',
+                    icon: Icons.today_rounded,
+                    isSelected: _filterMode == DateFilterMode.day &&
+                        _isSameDay(_selectedDate, DateTime.now()),
+                    onTap: () {
+                      setState(() {
+                        _filterMode = DateFilterMode.day;
+                        _selectedDate = DateTime.now();
+                      });
+                      _loadDashboardData();
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                  _buildFilterChip(
+                    label: '7 ngày',
+                    icon: Icons.date_range_rounded,
+                    isSelected: _filterMode == DateFilterMode.week,
+                    onTap: () {
+                      setState(() {
+                        _filterMode = DateFilterMode.week;
+                        _selectedDate = DateTime.now();
+                      });
+                      _loadDashboardData();
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                  _buildFilterChip(
+                    label: 'Tháng này',
+                    icon: Icons.calendar_month_rounded,
+                    isSelected: _filterMode == DateFilterMode.month &&
+                        _selectedDate.month == DateTime.now().month &&
+                        _selectedDate.year == DateTime.now().year,
+                    onTap: () {
+                      setState(() {
+                        _filterMode = DateFilterMode.month;
+                        _selectedDate = DateTime.now();
+                      });
+                      _loadDashboardData();
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                  _buildFilterChip(
+                    label: 'Năm nay',
+                    icon: Icons.calendar_today_rounded,
+                    isSelected: _filterMode == DateFilterMode.year &&
+                        _selectedDate.year == DateTime.now().year,
+                    onTap: () {
+                      setState(() {
+                        _filterMode = DateFilterMode.year;
+                        _selectedDate = DateTime.now();
+                      });
+                      _loadDashboardData();
+                    },
+                    colorScheme: colorScheme,
+                  ),
+                  const SizedBox(width: 4),
+                  // Divider dot
+                  if (!isNarrow)
+                    Container(
+                      width: 1,
+                      height: 28,
+                      color: colorScheme.outlineVariant,
+                    ),
+                  if (!isNarrow) const SizedBox(width: 4),
+                  _buildFilterChip(
+                    label: 'Chọn ngày',
+                    icon: Icons.edit_calendar_rounded,
+                    isSelected: _filterMode == DateFilterMode.day &&
+                        !_isSameDay(_selectedDate, DateTime.now()),
+                    onTap: _pickDay,
+                    colorScheme: colorScheme,
+                  ),
+                  _buildFilterChip(
+                    label: 'Chọn tháng',
+                    icon: Icons.event_note_rounded,
+                    isSelected: _filterMode == DateFilterMode.month &&
+                        !(_selectedDate.month == DateTime.now().month &&
+                            _selectedDate.year == DateTime.now().year),
+                    onTap: _pickMonth,
+                    colorScheme: colorScheme,
+                  ),
+                  _buildFilterChip(
+                    label: 'Tùy chỉnh',
+                    icon: Icons.tune_rounded,
+                    isSelected: _filterMode == DateFilterMode.custom,
+                    onTap: _pickCustomRange,
+                    colorScheme: colorScheme,
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required ColorScheme colorScheme,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? colorScheme.primary
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected
+                    ? colorScheme.onPrimary
+                    : colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  color: isSelected
+                      ? colorScheme.onPrimary
+                      : colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   // ─── Stat Card Widget ──────────────────────────────────────────
 
   Widget _buildStatCard({
@@ -227,7 +609,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+          color: Theme.of(context)
+              .colorScheme
+              .outlineVariant
+              .withValues(alpha: 0.5),
         ),
         boxShadow: [
           BoxShadow(
@@ -262,12 +647,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    color: color,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
                   ),
                 ),
               ],
@@ -301,23 +690,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _showRevenue
-                        ? 'Doanh thu 7 ngày gần nhất'
-                        : 'Số ca khám 7 ngày gần nhất',
+                    _showRevenue ? 'Biểu đồ Doanh thu' : 'Biểu đồ Ca khám',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Biểu đồ theo ngày',
+                    _getFilterLabel(),
                     style: TextStyle(
                       fontSize: 13,
                       color: colorScheme.onSurfaceVariant,
@@ -358,14 +748,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Chart
           SizedBox(
             height: 300,
-            child: _chartData.isEmpty
+            child: _isChartLoading
                 ? Center(
-                    child: Text(
-                      'Chưa có dữ liệu',
-                      style: TextStyle(color: colorScheme.onSurfaceVariant),
-                    ),
+                    child:
+                        CircularProgressIndicator(color: colorScheme.primary),
                   )
-                : _buildLineChart(colorScheme),
+                : _chartData.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.bar_chart_rounded,
+                                size: 48,
+                                color: colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.3)),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Chưa có dữ liệu trong khoảng thời gian này',
+                              style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _buildLineChart(colorScheme),
           ),
         ],
       ),
@@ -379,20 +785,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     for (int i = 0; i < _chartData.length; i++) {
       final entry = _chartData[i];
       final value = _showRevenue
-          ? (entry['amount'] as num).toDouble()
+          ? (entry['totalamount'] as num).toDouble()
           : (entry['count'] as num).toDouble();
       spots.add(FlSpot(i.toDouble(), value));
 
-      // Format date label: "14/06"
       final dateStr = entry['date'] as String;
       final date = DateTime.parse(dateStr);
-      bottomLabels.add('${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}');
+      bottomLabels.add(
+        '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}',
+      );
     }
 
     final maxY = spots.isEmpty
         ? 10.0
         : spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
     final ceilMaxY = maxY <= 0 ? 10.0 : (maxY * 1.3);
+
+    // Determine label interval: show max ~10 labels on X axis
+    final labelInterval =
+        _chartData.length > 10 ? (_chartData.length / 10).ceil() : 1;
 
     return LineChart(
       LineChartData(
@@ -422,12 +833,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 if (idx < 0 || idx >= bottomLabels.length) {
                   return const SizedBox.shrink();
                 }
+                // Show every Nth label to avoid overlapping
+                if (idx % labelInterval != 0 &&
+                    idx != bottomLabels.length - 1) {
+                  return const SizedBox.shrink();
+                }
                 return Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     bottomLabels[idx],
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -468,12 +884,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             barWidth: 3,
             isStrokeCapRound: true,
             dotData: FlDotData(
-              show: true,
+              show: _chartData.length <= 31,
               getDotPainter: (spot, percent, barData, index) =>
                   FlDotCirclePainter(
-                radius: 5,
+                radius: 4,
                 color: colorScheme.surface,
-                strokeWidth: 3,
+                strokeWidth: 2.5,
                 strokeColor: colorScheme.primary,
               ),
             ),
@@ -493,8 +909,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         lineTouchData: LineTouchData(
           handleBuiltInTouches: true,
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) =>
-                colorScheme.inverseSurface,
+            getTooltipColor: (_) => colorScheme.inverseSurface,
             tooltipRoundedRadius: 10,
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {

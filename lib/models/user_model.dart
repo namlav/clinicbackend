@@ -5,7 +5,7 @@ class UserModel {
   final String? phone;
   final String? email;
   final String role; // 'patient', 'doctor', 'admin'
-  final bool isActive;
+  final bool isactive;
 
   UserModel({
     required this.userid,
@@ -14,7 +14,7 @@ class UserModel {
     this.phone,
     this.email,
     required this.role,
-    required this.isActive,
+    required this.isactive,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -25,7 +25,7 @@ class UserModel {
       phone: json['phone'] as String?,
       email: json['email'] as String?,
       role: json['role'] as String? ?? 'patient',
-      isActive: json['is_active'] as bool? ?? true,
+      isactive: json['isactive'] as bool? ?? true,
     );
   }
 
@@ -37,7 +37,7 @@ class UserModel {
       'phone': phone,
       'email': email,
       'role': role,
-      'is_active': isActive,
+      'isactive': isactive,
     };
   }
 }

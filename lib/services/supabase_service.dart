@@ -35,7 +35,6 @@ class SupabaseService {
   }
 
   /// After sign-in, verify the user has the 'admin' role
-  /// Returns the user's role string, or null if not found
   Future<String?> getUserRole(String authId) async {
     final response = await client
         .from('users')
@@ -59,115 +58,164 @@ class SupabaseService {
     return (response as List).length;
   }
 
-  /// Sum revenue from successful payments
+  /// Count appointments within a date range
+  Future<int> getAppointmentsCountByRange(
+      String startDate, String endDate) async {
+    final response = await client
+        .from('appointments')
+        .select('appointmentid')
+        .gte('appointmentdate', startDate)
+        .lte('appointmentdate', endDate);
+    return (response as List).length;
+  }
+
+  /// Sum revenue from successful payments (all time)
   Future<double> getTotalRevenue() async {
     final response = await client
         .from('payments')
-        .select('amount')
+        .select('totalamount')
         .eq('status', 'Success');
     double total = 0;
     for (final row in response as List) {
-      total += (row['amount'] as num?)?.toDouble() ?? 0;
+      total += (row['totalamount'] as num?)?.toDouble() ?? 0;
     }
     return total;
   }
 
-  /// Count active doctors (users with role = 'doctor' and is_active = true)
-  Future<int> getActiveDoctorsCount() async {
+  /// Sum revenue from successful payments within a date range
+  Future<double> getRevenueByRange(String startDate, String endDate) async {
     final response = await client
-        .from('doctors')
-        .select('doctorid');
+        .from('payments')
+        .select('''
+          totalamount,
+          appointments (appointmentdate)
+        ''')
+        .eq('status', 'Success')
+        .gte('appointments.appointmentdate', startDate)
+        .lte('appointments.appointmentdate', endDate);
+    double total = 0;
+    for (final row in response as List) {
+      final appointment = row['appointments'] as Map<String, dynamic>?;
+      if (appointment == null) continue;
+      total += (row['totalamount'] as num?)?.toDouble() ?? 0;
+    }
+    return total;
+  }
+
+  /// Count active doctors
+  Future<int> getActiveDoctorsCount() async {
+    final response = await client.from('doctors').select('doctorid');
     return (response as List).length;
   }
 
-  /// Get appointment counts for the last 7 days
-  /// Returns a list of {date, count} maps sorted by date ascending
-  Future<List<Map<String, dynamic>>> getAppointmentsLast7Days() async {
-    final now = DateTime.now();
-    final sevenDaysAgo = now.subtract(const Duration(days: 6));
-    final startDate = sevenDaysAgo.toIso8601String().split('T')[0];
-    final endDate = now.toIso8601String().split('T')[0];
-
+  /// Get appointment counts grouped by date within a range
+  Future<List<Map<String, dynamic>>> getAppointmentsByRange(
+      String startDate, String endDate) async {
     final response = await client
         .from('appointments')
         .select('appointmentdate')
         .gte('appointmentdate', startDate)
         .lte('appointmentdate', endDate);
 
-    // Group by date
+    final start = DateTime.parse(startDate);
+    final end = DateTime.parse(endDate);
     final Map<String, int> countMap = {};
-    for (int i = 0; i <= 6; i++) {
-      final date =
-          sevenDaysAgo.add(Duration(days: i)).toIso8601String().split('T')[0];
-      countMap[date] = 0;
+    for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      countMap[d.toIso8601String().split('T')[0]] = 0;
     }
     for (final row in response as List) {
       final date = row['appointmentdate'] as String;
       countMap[date] = (countMap[date] ?? 0) + 1;
     }
 
-    final result = countMap.entries
-        .map((e) => {'date': e.key, 'count': e.value})
-        .toList()
-      ..sort((a, b) =>
-          (a['date'] as String).compareTo(b['date'] as String));
+    final result =
+        countMap.entries.map((e) => {'date': e.key, 'count': e.value}).toList()
+          ..sort(
+            (a, b) => (a['date'] as String).compareTo(b['date'] as String),
+          );
     return result;
   }
 
-  /// Get revenue for the last 7 days
-  /// Returns a list of {date, amount} maps sorted by date ascending
-  Future<List<Map<String, dynamic>>> getRevenueLast7Days() async {
-    final now = DateTime.now();
-    final sevenDaysAgo = now.subtract(const Duration(days: 6));
-    final startDate = sevenDaysAgo.toIso8601String().split('T')[0];
-    final endDate = now.toIso8601String().split('T')[0];
-
-    // Join payments with appointments to get the date
+  /// Get revenue grouped by date within a range
+  Future<List<Map<String, dynamic>>> getRevenueByRangeGrouped(
+      String startDate, String endDate) async {
     final response = await client
         .from('payments')
-        .select('amount, appointments!inner(appointmentdate)')
+        .select('''
+          paymentid,
+          totalamount,
+          status,
+          appointments (
+            appointmentid,
+            appointmentdate,
+            starttime,
+            users (fullname),
+            doctors (fullname),
+            services (servicename, price)
+          )
+        ''')
         .eq('status', 'Success')
         .gte('appointments.appointmentdate', startDate)
         .lte('appointments.appointmentdate', endDate);
 
-    // Group by date
+    final start = DateTime.parse(startDate);
+    final end = DateTime.parse(endDate);
     final Map<String, double> revenueMap = {};
-    for (int i = 0; i <= 6; i++) {
-      final date =
-          sevenDaysAgo.add(Duration(days: i)).toIso8601String().split('T')[0];
-      revenueMap[date] = 0;
+    for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      revenueMap[d.toIso8601String().split('T')[0]] = 0;
     }
     for (final row in response as List) {
-      final appointment = row['appointments'] as Map<String, dynamic>;
+      final appointment = row['appointments'] as Map<String, dynamic>?;
+      if (appointment == null) continue;
       final date = appointment['appointmentdate'] as String;
       revenueMap[date] =
-          (revenueMap[date] ?? 0) + ((row['amount'] as num?)?.toDouble() ?? 0);
+          (revenueMap[date] ?? 0) +
+          ((row['totalamount'] as num?)?.toDouble() ?? 0);
     }
 
-    final result = revenueMap.entries
-        .map((e) => {'date': e.key, 'amount': e.value})
-        .toList()
-      ..sort((a, b) =>
-          (a['date'] as String).compareTo(b['date'] as String));
+    final result =
+        revenueMap.entries
+            .map((e) => {'date': e.key, 'totalamount': e.value})
+            .toList()
+          ..sort(
+            (a, b) => (a['date'] as String).compareTo(b['date'] as String),
+          );
     return result;
+  }
+
+  /// Convenience: last 7 days appointments
+  Future<List<Map<String, dynamic>>> getAppointmentsLast7Days() async {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(days: 6));
+    return getAppointmentsByRange(
+      start.toIso8601String().split('T')[0],
+      now.toIso8601String().split('T')[0],
+    );
+  }
+
+  /// Convenience: last 7 days revenue
+  Future<List<Map<String, dynamic>>> getRevenueLast7Days() async {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(days: 6));
+    return getRevenueByRangeGrouped(
+      start.toIso8601String().split('T')[0],
+      now.toIso8601String().split('T')[0],
+    );
   }
 
   // ─── Doctor Methods ─────────────────────────────────────────────
 
-  /// Fetch all doctors with their user status (is_active)
-  /// Returns joined data from doctors + users tables
+  /// Fetch all doctors
   Future<List<Map<String, dynamic>>> getDoctorsWithStatus() async {
-    final response = await client
-        .from('doctors')
-        .select('*, users!inner(is_active, email, phone)');
+    final response = await client.from('doctors').select('*');
     return List<Map<String, dynamic>>.from(response as List);
   }
 
-  /// Toggle is_active status on users table for a given userid
+  /// Toggle isactive status on users table for a given userid
   Future<void> toggleDoctorActive(int userId, bool isActive) async {
     await client
         .from('users')
-        .update({'is_active': isActive})
+        .update({'isactive': isActive})
         .eq('userid', userId);
   }
 
@@ -194,7 +242,7 @@ class SupabaseService {
       'price': price,
       'specialtyid': specialtyid,
       'description': description ?? '',
-      'is_active': true,
+      'isactive': true,
     });
   }
 
@@ -209,14 +257,31 @@ class SupabaseService {
     final Map<String, dynamic> updates = {};
     if (servicename != null) updates['servicename'] = servicename;
     if (price != null) updates['price'] = price;
-    if (isActive != null) updates['is_active'] = isActive;
+    if (isActive != null) updates['isactive'] = isActive;
     if (description != null) updates['description'] = description;
 
     if (updates.isNotEmpty) {
-      await client
-          .from('services')
-          .update(updates)
-          .eq('serviceid', serviceid);
+      await client.from('services').update(updates).eq('serviceid', serviceid);
     }
+  }
+
+  // ─── User Methods (Phase 5) ─────────────────────────────────────
+
+  /// Fetch all users with role 'doctor' or 'patient'
+  Future<List<Map<String, dynamic>>> getUsersForManagement() async {
+    final response = await client
+        .from('users')
+        .select('*')
+        .or('role.eq.doctor,role.eq.patient')
+        .order('userid', ascending: true);
+    return List<Map<String, dynamic>>.from(response as List);
+  }
+
+  /// Toggle isactive on users table
+  Future<void> toggleUserActive(int userId, bool isActive) async {
+    await client
+        .from('users')
+        .update({'isactive': isActive})
+        .eq('userid', userId);
   }
 }

@@ -4,6 +4,7 @@ import 'package:clinicbackend/views/login_screen.dart';
 import 'package:clinicbackend/views/dashboard_screen.dart';
 import 'package:clinicbackend/views/doctor_management_screen.dart';
 import 'package:clinicbackend/views/service_management_screen.dart';
+import 'package:clinicbackend/views/user_management_screen.dart';
 
 /// The main admin layout with a fixed Sidebar on the left
 /// and a dynamic content area on the right.
@@ -32,6 +33,10 @@ class _AdminLayoutState extends State<AdminLayout> {
       icon: Icons.miscellaneous_services_rounded,
       label: 'Quản lý Dịch vụ',
     ),
+    _NavItem(
+      icon: Icons.people_alt_rounded,
+      label: 'Quản lý Người dùng',
+    ),
   ];
 
   Widget _buildContent() {
@@ -42,6 +47,8 @@ class _AdminLayoutState extends State<AdminLayout> {
         return const DoctorManagementScreen();
       case 2:
         return const ServiceManagementScreen();
+      case 3:
+        return const UserManagementScreen();
       default:
         return const DashboardScreen();
     }

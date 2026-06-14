@@ -22,7 +22,7 @@ class ServiceModel {
       description: json['description'] as String?,
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       specialtyid: json['specialtyid'] as int?,
-      isActive: json['is_active'] as bool? ?? true,
+      isActive: json['isactive'] as bool? ?? true,
     );
   }
 
@@ -33,7 +33,7 @@ class ServiceModel {
       'description': description,
       'price': price,
       'specialtyid': specialtyid,
-      'is_active': isActive,
+      'isactive': isActive,
     };
   }
 }
