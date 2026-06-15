@@ -222,17 +222,17 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(response as List);
   }
 
-  /// Fetch specialty names from services table (group by specialtyid)
+  /// Fetch specialty names from specialties table
   Future<Map<int, String>> getSpecialtyNames() async {
     final response = await client
-        .from('services')
-        .select('specialtyid, servicename')
-        .not('specialtyid', 'is', null);
+        .from('specialties')
+        .select('specialtyid, specialtyname');
     final Map<int, String> map = {};
     for (final row in response as List) {
       final id = row['specialtyid'] as int?;
-      if (id != null && !map.containsKey(id)) {
-        map[id] = row['servicename'] as String? ?? 'Khoa $id';
+      final name = row['specialtyname'] as String?;
+      if (id != null) {
+        map[id] = name ?? 'Khoa $id';
       }
     }
     return map;
@@ -250,10 +250,16 @@ class SupabaseService {
 
   /// Toggle isactive status on users table for a given userid
   Future<void> toggleDoctorActive(int userId, bool isActive) async {
-    await client
+    final result = await client
         .from('users')
         .update({'isactive': isActive})
-        .eq('userid', userId);
+        .eq('userid', userId)
+        .select();
+    if ((result as List).isEmpty) {
+      throw Exception(
+        'Cập nhật trạng thái thất bại. Vui lòng kiểm tra quyền truy cập DB (RLS).',
+      );
+    }
   }
 
   // ─── Service Methods ────────────────────────────────────────────
@@ -274,13 +280,18 @@ class SupabaseService {
     int? specialtyid,
     String? description,
   }) async {
-    await client.from('services').insert({
+    final result = await client.from('services').insert({
       'servicename': servicename,
       'price': price,
       'specialtyid': specialtyid,
       'description': description ?? '',
       'isactive': true,
-    });
+    }).select();
+    if ((result as List).isEmpty) {
+      throw Exception(
+        'Thêm dịch vụ thất bại. Vui lòng kiểm tra quyền truy cập DB (RLS).',
+      );
+    }
   }
 
   /// Update a service
@@ -298,7 +309,16 @@ class SupabaseService {
     if (description != null) updates['description'] = description;
 
     if (updates.isNotEmpty) {
-      await client.from('services').update(updates).eq('serviceid', serviceid);
+      final result = await client
+          .from('services')
+          .update(updates)
+          .eq('serviceid', serviceid)
+          .select();
+      if ((result as List).isEmpty) {
+        throw Exception(
+          'Cập nhật dịch vụ thất bại. Vui lòng kiểm tra quyền truy cập DB (RLS).',
+        );
+      }
     }
   }
 
@@ -316,9 +336,15 @@ class SupabaseService {
 
   /// Toggle isactive on users table
   Future<void> toggleUserActive(int userId, bool isActive) async {
-    await client
+    final result = await client
         .from('users')
         .update({'isactive': isActive})
-        .eq('userid', userId);
+        .eq('userid', userId)
+        .select();
+    if ((result as List).isEmpty) {
+      throw Exception(
+        'Cập nhật trạng thái thất bại. Vui lòng kiểm tra quyền truy cập DB (RLS).',
+      );
+    }
   }
 }
