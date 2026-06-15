@@ -12,108 +12,9 @@ class DoctorManagementScreen extends StatefulWidget {
 class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _doctors = [];
+  Map<int, String> _specialtyNames = {};
   String _searchQuery = '';
   String _statusFilter = 'all'; // 'all', 'active', 'inactive'
-
-  void _showDoctorDetails(Map<String, dynamic> doc) {
-    final users = doc['users'] as Map<String, dynamic>? ?? {};
-    final isActive = users['isactive'] as bool? ?? true;
-    final email = users['email'] as String? ?? 'N/A';
-    final phone = users['phone'] as String? ?? 'N/A';
-    final fullname = doc['fullname'] as String? ?? 'N/A';
-    final experience = doc['experienceyears']?.toString() ?? 'N/A';
-    final specialty = doc['specialtyid'] != null ? 'Khoa ${doc['specialtyid']}' : 'N/A';
-    final bio = doc['bio'] as String? ?? 'Chưa có thông tin giới thiệu';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              backgroundImage: doc['avatarurl'] != null && (doc['avatarurl'] as String).isNotEmpty
-                  ? NetworkImage(doc['avatarurl'] as String)
-                  : null,
-              child: doc['avatarurl'] == null || (doc['avatarurl'] as String).isEmpty
-                  ? Icon(Icons.person_rounded, color: Theme.of(context).colorScheme.primary)
-                  : null,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(fullname, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isActive ? const Color(0xFFCCFBF1) : const Color(0xFFFEE2E2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      isActive ? 'Đang hoạt động' : 'Đã khóa',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: isActive ? const Color(0xFF065F46) : const Color(0xFFB91C1C),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: SizedBox(
-          width: 400,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDetailRow(context, Icons.badge_rounded, 'Mã Bác sĩ', '#${doc['doctorid']}'),
-                _buildDetailRow(context, Icons.category_rounded, 'Chuyên khoa', specialty),
-                _buildDetailRow(context, Icons.work_history_rounded, 'Kinh nghiệm', '$experience năm'),
-                const Divider(height: 24),
-                _buildDetailRow(context, Icons.email_rounded, 'Email', email),
-                _buildDetailRow(context, Icons.phone_rounded, 'Số điện thoại', phone),
-                const Divider(height: 24),
-                const Text('Giới thiệu:', style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                Text(bio, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Đóng'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(BuildContext context, IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Text('$label:', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(width: 8),
-          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w500))),
-        ],
-      ),
-    );
-  }
-
   RealtimeChannel? _realtimeChannel;
 
   @override
@@ -150,10 +51,14 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
   Future<void> _loadDoctors() async {
     setState(() => _isLoading = true);
     try {
-      final data = await SupabaseService.instance.getDoctorsWithStatus();
+      final results = await Future.wait([
+        SupabaseService.instance.getDoctorsWithStatus(),
+        SupabaseService.instance.getSpecialtyNames(),
+      ]);
       if (mounted) {
         setState(() {
-          _doctors = data;
+          _doctors = results[0] as List<Map<String, dynamic>>;
+          _specialtyNames = results[1] as Map<int, String>;
           _isLoading = false;
         });
       }
@@ -172,6 +77,11 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
         );
       }
     }
+  }
+
+  String _getSpecialtyName(int? specialtyId) {
+    if (specialtyId == null) return 'N/A';
+    return _specialtyNames[specialtyId] ?? 'Khoa $specialtyId';
   }
 
   Future<void> _toggleDoctorActive(
@@ -242,7 +152,7 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
             ),
           ),
         );
-        _loadDoctors(); // Reload data
+        _loadDoctors();
       }
     } catch (e) {
       if (mounted) {
@@ -260,9 +170,135 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
     }
   }
 
+  void _showDoctorDetails(Map<String, dynamic> doc) {
+    final users = doc['users'] as Map<String, dynamic>? ?? {};
+    final isActive = users['isactive'] as bool? ?? true;
+    final email = users['email'] as String? ?? 'N/A';
+    final phone = users['phone'] as String? ?? 'N/A';
+    final fullname = doc['fullname'] as String? ?? 'N/A';
+    final experience = doc['experienceyears']?.toString() ?? 'N/A';
+    final specialty = _getSpecialtyName(doc['specialtyid'] as int?);
+    final bio = doc['bio'] as String? ?? 'Chưa có thông tin giới thiệu';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor:
+                  Theme.of(context).colorScheme.primaryContainer,
+              backgroundImage: doc['avatarurl'] != null &&
+                      (doc['avatarurl'] as String).isNotEmpty
+                  ? NetworkImage(doc['avatarurl'] as String)
+                  : null,
+              child: doc['avatarurl'] == null ||
+                      (doc['avatarurl'] as String).isEmpty
+                  ? Icon(Icons.person_rounded,
+                      color: Theme.of(context).colorScheme.primary)
+                  : null,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(fullname,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 18)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? const Color(0xFFCCFBF1)
+                          : const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      isActive ? 'Đang hoạt động' : 'Đã khóa',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: isActive
+                            ? const Color(0xFF065F46)
+                            : const Color(0xFFB91C1C),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetailRow(Icons.badge_rounded, 'Mã Bác sĩ',
+                    '#${doc['doctorid']}'),
+                _buildDetailRow(Icons.perm_identity_rounded, 'Mã User',
+                    '#${doc['userid']}'),
+                _buildDetailRow(
+                    Icons.category_rounded, 'Chuyên khoa', specialty),
+                _buildDetailRow(Icons.work_history_rounded, 'Kinh nghiệm',
+                    '$experience năm'),
+                const Divider(height: 24),
+                _buildDetailRow(Icons.email_rounded, 'Email', email),
+                _buildDetailRow(Icons.phone_rounded, 'Số điện thoại', phone),
+                const Divider(height: 24),
+                const Text('Giới thiệu:',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Text(bio,
+                    style: TextStyle(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon,
+              size: 20,
+              color: Theme.of(context).colorScheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Text('$label:',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(value,
+                  style: const TextStyle(fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> get _filteredDoctors {
     var list = _doctors;
-    
+
     if (_statusFilter != 'all') {
       list = list.where((doc) {
         final users = doc['users'] as Map<String, dynamic>? ?? {};
@@ -270,7 +306,7 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
         return _statusFilter == 'active' ? isActive : !isActive;
       }).toList();
     }
-    
+
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       list = list.where((doc) {
@@ -280,7 +316,7 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
         return name.contains(query) || email.contains(query);
       }).toList();
     }
-    
+
     return list;
   }
 
@@ -344,7 +380,7 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
           ),
           const SizedBox(height: 20),
 
-          // ─── Search Bar ──────────────────────────────────────
+          // ─── Search + Filter ───────────────────────────────────
           Wrap(
             spacing: 16,
             runSpacing: 12,
@@ -353,39 +389,46 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
               SizedBox(
                 width: 360,
                 child: TextField(
-              onChanged: (v) => setState(() => _searchQuery = v),
-              decoration: InputDecoration(
-                hintText: 'Tìm kiếm bác sĩ...',
-                prefixIcon: const Icon(Icons.search_rounded),
-                fillColor: colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.5,
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                  decoration: InputDecoration(
+                    hintText: 'Tìm kiếm bác sĩ...',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    fillColor: colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+              ),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'all', label: Text('Tất cả')),
+                  ButtonSegment(
+                    value: 'active',
+                    label: Text('Đang hoạt động'),
+                    icon: Icon(Icons.check_circle_rounded, size: 18),
+                  ),
+                  ButtonSegment(
+                    value: 'inactive',
+                    label: Text('Đã khóa'),
+                    icon: Icon(Icons.cancel_rounded, size: 18),
+                  ),
+                ],
+                selected: {_statusFilter},
+                onSelectionChanged: (set) {
+                  setState(() => _statusFilter = set.first);
+                },
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: WidgetStatePropertyAll(
+                      Theme.of(context).textTheme.bodySmall),
                 ),
               ),
-            ),
-              ),
-            // Add SegmentedButton here
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'all', label: Text('Tất cả')),
-                ButtonSegment(value: 'active', label: Text('Đang hoạt động'), icon: Icon(Icons.check_circle_rounded, size: 18)),
-                ButtonSegment(value: 'inactive', label: Text('Đã khóa'), icon: Icon(Icons.cancel_rounded, size: 18)),
-              ],
-              selected: {_statusFilter},
-              onSelectionChanged: (set) {
-                setState(() => _statusFilter = set.first);
-              },
-              style: ButtonStyle(
-                visualDensity: VisualDensity.compact,
-                textStyle: WidgetStatePropertyAll(Theme.of(context).textTheme.bodySmall),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
+            ],
+          ),
+          const SizedBox(height: 20),
 
           // ─── Data Table ──────────────────────────────────────
           Container(
@@ -415,9 +458,8 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                             Icon(
                               Icons.person_search_rounded,
                               size: 48,
-                              color: colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.4,
-                              ),
+                              color: colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.4),
                             ),
                             const SizedBox(height: 16),
                             Text(
@@ -438,9 +480,8 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                       child: DataTable(
                         showCheckboxColumn: false,
                         headingRowColor: WidgetStatePropertyAll(
-                          colorScheme.surfaceContainerHighest.withValues(
-                            alpha: 0.5,
-                          ),
+                          colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.5),
                         ),
                         dataRowMaxHeight: 72,
                         columnSpacing: 32,
@@ -457,13 +498,17 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                         rows: _filteredDoctors.map((doc) {
                           final users =
                               doc['users'] as Map<String, dynamic>? ?? {};
-                          final isActive = users['isactive'] as bool? ?? true;
+                          final isActive =
+                              users['isactive'] as bool? ?? true;
                           final userId = doc['userid'] as int? ?? 0;
-                          final fullname = doc['fullname'] as String? ?? 'N/A';
-                          final email = users['email'] as String? ?? 'N/A';
+                          final fullname =
+                              doc['fullname'] as String? ?? 'N/A';
+                          final email =
+                              users['email'] as String? ?? 'N/A';
 
                           return DataRow(
-                            onSelectChanged: (_) => _showDoctorDetails(doc),
+                            onSelectChanged: (_) =>
+                                _showDoctorDetails(doc),
                             cells: [
                               DataCell(
                                 Text(
@@ -481,23 +526,19 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                                       radius: 18,
                                       backgroundColor:
                                           colorScheme.primaryContainer,
-                                      backgroundImage:
-                                          doc['avatarurl'] != null &&
+                                      backgroundImage: doc['avatarurl'] !=
+                                                  null &&
                                               (doc['avatarurl'] as String)
                                                   .isNotEmpty
                                           ? NetworkImage(
-                                              doc['avatarurl'] as String,
-                                            )
+                                              doc['avatarurl'] as String)
                                           : null,
-                                      child:
-                                          doc['avatarurl'] == null ||
+                                      child: doc['avatarurl'] == null ||
                                               (doc['avatarurl'] as String)
                                                   .isEmpty
-                                          ? Icon(
-                                              Icons.person_rounded,
+                                          ? Icon(Icons.person_rounded,
                                               size: 20,
-                                              color: colorScheme.primary,
-                                            )
+                                              color: colorScheme.primary)
                                           : null,
                                     ),
                                     const SizedBox(width: 12),
@@ -511,11 +552,8 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                                 ),
                               ),
                               DataCell(
-                                Text(
-                                  doc['specialtyid'] != null
-                                      ? 'Khoa ${doc['specialtyid']}'
-                                      : 'N/A',
-                                ),
+                                Text(_getSpecialtyName(
+                                    doc['specialtyid'] as int?)),
                               ),
                               DataCell(
                                 Text(
@@ -535,7 +573,8 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                                     color: isActive
                                         ? const Color(0xFFCCFBF1)
                                         : const Color(0xFFFEE2E2),
-                                    borderRadius: BorderRadius.circular(20),
+                                    borderRadius:
+                                        BorderRadius.circular(20),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -552,7 +591,9 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
-                                        isActive ? 'Hoạt động' : 'Đã khóa',
+                                        isActive
+                                            ? 'Hoạt động'
+                                            : 'Đã khóa',
                                         style: TextStyle(
                                           fontSize: 13,
                                           fontWeight: FontWeight.w500,
@@ -568,7 +609,8 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                               DataCell(
                                 isActive
                                     ? OutlinedButton.icon(
-                                        onPressed: () => _toggleDoctorActive(
+                                        onPressed: () =>
+                                            _toggleDoctorActive(
                                           userId,
                                           isActive,
                                           fullname,
@@ -579,25 +621,26 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                                         ),
                                         label: const Text('Khóa'),
                                         style: OutlinedButton.styleFrom(
-                                          foregroundColor: colorScheme.error,
+                                          foregroundColor:
+                                              colorScheme.error,
                                           side: BorderSide(
-                                            color: colorScheme.error.withValues(
-                                              alpha: 0.5,
-                                            ),
+                                            color: colorScheme.error
+                                                .withValues(alpha: 0.5),
                                           ),
-                                          padding: const EdgeInsets.symmetric(
+                                          padding:
+                                              const EdgeInsets.symmetric(
                                             horizontal: 16,
                                             vertical: 8,
                                           ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
                                           ),
                                         ),
                                       )
                                     : FilledButton.icon(
-                                        onPressed: () => _toggleDoctorActive(
+                                        onPressed: () =>
+                                            _toggleDoctorActive(
                                           userId,
                                           isActive,
                                           fullname,
@@ -608,15 +651,16 @@ class _DoctorManagementScreenState extends State<DoctorManagementScreen> {
                                         ),
                                         label: const Text('Mở khóa'),
                                         style: FilledButton.styleFrom(
-                                          backgroundColor: colorScheme.primary,
-                                          padding: const EdgeInsets.symmetric(
+                                          backgroundColor:
+                                              colorScheme.primary,
+                                          padding:
+                                              const EdgeInsets.symmetric(
                                             horizontal: 16,
                                             vertical: 8,
                                           ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              10,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(10),
                                           ),
                                         ),
                                       ),

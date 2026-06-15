@@ -216,8 +216,36 @@ class SupabaseService {
 
   /// Fetch all doctors with their user status
   Future<List<Map<String, dynamic>>> getDoctorsWithStatus() async {
-    final response = await client.from('doctors').select('*, users(isactive)');
+    final response = await client
+        .from('doctors')
+        .select('*, users(isactive, email, phone)');
     return List<Map<String, dynamic>>.from(response as List);
+  }
+
+  /// Fetch specialty names from services table (group by specialtyid)
+  Future<Map<int, String>> getSpecialtyNames() async {
+    final response = await client
+        .from('services')
+        .select('specialtyid, servicename')
+        .not('specialtyid', 'is', null);
+    final Map<int, String> map = {};
+    for (final row in response as List) {
+      final id = row['specialtyid'] as int?;
+      if (id != null && !map.containsKey(id)) {
+        map[id] = row['servicename'] as String? ?? 'Khoa $id';
+      }
+    }
+    return map;
+  }
+
+  /// Get completed appointments count for a specific user
+  Future<int> getCompletedAppointmentsCount(int userId) async {
+    final response = await client
+        .from('appointments')
+        .select('appointmentid')
+        .eq('userid', userId)
+        .eq('status', 'Completed');
+    return (response as List).length;
   }
 
   /// Toggle isactive status on users table for a given userid

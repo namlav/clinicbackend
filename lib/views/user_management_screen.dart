@@ -14,7 +14,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   List<Map<String, dynamic>> _users = [];
   String _searchQuery = '';
   String _roleFilter = 'all'; // 'all', 'doctor', 'patient'
-
   RealtimeChannel? _realtimeChannel;
 
   @override
@@ -152,6 +151,165 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     }
   }
 
+  // ─── User Detail Dialog ───────────────────────────────────────
+  Future<void> _showUserDetails(Map<String, dynamic> user) async {
+    final userId = user['userid'] as int? ?? 0;
+    final fullname = user['fullname'] as String? ?? 'N/A';
+    final email = user['email'] as String? ?? 'N/A';
+    final phone = user['phone'] as String? ?? 'N/A';
+    final role = user['role'] as String?;
+    final isActive = user['isactive'] as bool? ?? true;
+
+    // Load completed appointments count
+    int completedCount = 0;
+    if (role == 'patient') {
+      try {
+        completedCount = await SupabaseService.instance
+            .getCompletedAppointmentsCount(userId);
+      } catch (_) {
+        // silently fail
+      }
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: _getRoleBgColor(role),
+              child: Icon(
+                role == 'doctor'
+                    ? Icons.medical_services_rounded
+                    : Icons.person_rounded,
+                color: _getRoleColor(role),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(fullname,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 18)),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _getRoleBgColor(role),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _getRoleLabel(role),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: _getRoleColor(role),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? const Color(0xFFCCFBF1)
+                              : const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          isActive ? 'Hoạt động' : 'Đã khóa',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: isActive
+                                ? const Color(0xFF065F46)
+                                : const Color(0xFFB91C1C),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDetailRow(Icons.badge_rounded, 'Mã User', '#$userId'),
+                _buildDetailRow(Icons.email_rounded, 'Email', email),
+                _buildDetailRow(Icons.phone_rounded, 'Số điện thoại', phone),
+                _buildDetailRow(
+                  Icons.shield_rounded,
+                  'Vai trò',
+                  _getRoleLabel(role),
+                ),
+                _buildDetailRow(
+                  isActive
+                      ? Icons.check_circle_rounded
+                      : Icons.cancel_rounded,
+                  'Trạng thái',
+                  isActive ? 'Đang hoạt động' : 'Đã khóa',
+                ),
+                if (role == 'patient') ...[
+                  const Divider(height: 24),
+                  _buildDetailRow(
+                    Icons.event_available_rounded,
+                    'Ca khám hoàn thành',
+                    '$completedCount ca',
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon,
+              size: 20,
+              color: Theme.of(context).colorScheme.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Text('$label:',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(value,
+                  style: const TextStyle(fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> get _filteredUsers {
     var list = _users;
 
@@ -232,10 +390,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     }
 
     // Count by role
-    final doctorCount =
-        _users.where((u) => u['role'] == 'doctor').length;
-    final patientCount =
-        _users.where((u) => u['role'] == 'patient').length;
+    final doctorCount = _users.where((u) => u['role'] == 'doctor').length;
+    final patientCount = _users.where((u) => u['role'] == 'patient').length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -379,6 +535,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   : SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: DataTable(
+                        showCheckboxColumn: false,
                         headingRowColor: WidgetStatePropertyAll(
                           colorScheme.surfaceContainerHighest
                               .withValues(alpha: 0.5),
@@ -406,6 +563,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           final role = user['role'] as String?;
 
                           return DataRow(
+                            onSelectChanged: (_) =>
+                                _showUserDetails(user),
                             cells: [
                               // ID
                               DataCell(

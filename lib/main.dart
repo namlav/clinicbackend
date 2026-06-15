@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,6 +34,18 @@ class SereneHealthApp extends StatelessWidget {
     return MaterialApp(
       title: 'Serene Health - Quản trị',
       debugShowCheckedModeBanner: false,
+
+      // ─── Localization ──────────────────────────────────────
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('vi', 'VN'),
+        Locale('en', 'US'),
+      ],
+      locale: const Locale('vi', 'VN'),
 
       // ─── Light Theme ────────────────────────────────────────
       theme: ThemeData(

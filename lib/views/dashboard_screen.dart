@@ -211,7 +211,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       initialDate: _selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      locale: const Locale('vi', 'VN'),
     );
     if (picked != null) {
       setState(() {
@@ -229,7 +228,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       initialDate: DateTime(_selectedDate.year, _selectedDate.month, 1),
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
-      locale: const Locale('vi', 'VN'),
     );
     if (picked != null) {
       setState(() {
@@ -250,7 +248,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             start: DateTime.now().subtract(const Duration(days: 30)),
             end: DateTime.now(),
           ),
-      locale: const Locale('vi', 'VN'),
     );
     if (picked != null) {
       setState(() {
