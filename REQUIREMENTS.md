@@ -1,4 +1,5 @@
 # Yêu Cầu Phát Triển: Serene Health - Admin Dashboard (Flutter Web)
+# Toàn bộ giao diện trang web phải là tiếng Việt
 
 ## 1. Mục Tiêu Dự Án
 Xây dựng trang Web Admin Dashboard bằng Flutter cho nền tảng quản lý phòng khám Serene Health. 
@@ -7,11 +8,11 @@ Xây dựng trang Web Admin Dashboard bằng Flutter cho nền tảng quản lý
 ## 2. Kiến Trúc Cơ Sở Dữ Liệu (Supabase Schema)
 Dưới đây là cấu trúc chính xác của các bảng trong database. Mọi Model (Dart class) và câu lệnh gọi API `.from('table_name')` phải tuân thủ nghiêm ngặt định dạng chữ thường này (không dùng camelCase hay snake_case cho tên cột khi gọi API).
 
-- **Bảng `users`**: `userid` (int), `authid` (uuid), `fullname` (text), `phone` (text), `email` (text), `role` (varchar, nhận giá trị: 'patient', 'doctor', 'admin'), `is_active` (bool).
+- **Bảng `users`**: `userid` (int), `authid` (uuid), `fullname` (text), `phone` (text), `email` (text), `role` (varchar, nhận giá trị: 'patient', 'doctor', 'admin'), `isactive` (bool).
 - **Bảng `doctors`**: `doctorid` (int), `userid` (int - FK to users), `fullname` (text), `specialtyid` (int), `avatarurl` (text), `bio` (text), `experienceyears` (int).
-- **Bảng `services`**: `serviceid` (int), `servicename` (text), `description` (text), `price` (numeric), `specialtyid` (int), `is_active` (bool).
+- **Bảng `services`**: `serviceid` (int), `servicename` (text), `description` (text), `price` (numeric), `specialtyid` (int), `isactive` (bool).
 - **Bảng `appointments`**: `appointmentid` (int), `userid` (int), `doctorid` (int), `serviceid` (int), `appointmentdate` (date), `starttime` (time), `status` (varchar: 'Pending', 'Confirmed', 'Cancelled', 'Completed').
-- **Bảng `payments`**: `paymentid` (int), `appointmentid` (int), `amount` (numeric), `status` (varchar: 'Pending', 'Success', 'Failed').
+- **Bảng `payments`**: `paymentid` (int), `appointmentid` (int), `totalamount` (numeric), `status` (varchar: 'Pending', 'Success', 'Failed').
 
 ## 3. Kiến Trúc Thư Mục (Folder Structure)
 Yêu cầu tạo các thư mục sau trong `lib/`:
@@ -30,18 +31,22 @@ Yêu cầu tạo các thư mục sau trong `lib/`:
 ### Phase 2: Màn Hình Dashboard (`dashboard_screen.dart`)
 - **Top Cards**: Hiển thị 3 chỉ số tổng quan:
   1. Tổng số ca khám trong ngày (count từ bảng `appointments` với `appointmentdate` = hôm nay).
-  2. Tổng doanh thu (sum cột `amount` từ bảng `payments` có status = 'Success').
+  2. Tổng doanh thu (sum cột `totalamount` từ bảng `payments` có status = 'Success').
   3. Tổng số bác sĩ đang hoạt động.
 - **Biểu đồ**: Sử dụng thư viện `fl_chart` để vẽ biểu đồ đường (Line Chart) mô tả doanh thu hoặc số ca khám 7 ngày gần nhất.
 
 ### Phase 3: Quản Lý Bác Sĩ (`doctor_management_screen.dart`)
 - Hiển thị danh sách bác sĩ dưới dạng `DataTable` (kéo data từ bảng `doctors` join với `users` để lấy trạng thái).
-- Có nút Khóa/Mở Khóa tài khoản: Gọi lệnh `.update({'is_active': false/true})` vào bảng `users` với `userid` tương ứng.
+- Có nút Khóa/Mở Khóa tài khoản: Gọi lệnh `.update({'isactive': false/true})` vào bảng `users` với `userid` tương ứng.
 
 ### Phase 4: Quản Lý Dịch Vụ (`service_management_screen.dart`)
 - Hiển thị danh sách từ bảng `services` dưới dạng `DataTable`.
 - Nút "Thêm Dịch Vụ": Mở một Dialog chứa form nhập `servicename`, `price`, `specialtyid`.
-- Nút "Chỉnh Sửa": Update giá tiền hoặc đổi trạng thái `is_active`.
+- Nút "Chỉnh Sửa": Update giá tiền hoặc đổi trạng thái `isactive`.
+
+### Phase 5: Quản Lý Người Dùng (`user_management_screen.dart`)
+- Hiển thị danh sách từ bảng `users` dưới dạng `DataTable`. (chỉ hiển thị bác sĩ và bệnh nhân)
+- Có nút Khóa/Mở Khóa tài khoản: Gọi lệnh `.update({'isactive': false/true})` vào bảng `users` với `userid` tương ứng. 
 
 ## 5. Quy Tắc Code (Coding Standards)
 - Luôn bọc các câu lệnh gọi API Supabase trong khối `try-catch` và hiển thị `SnackBar` nếu có lỗi.
