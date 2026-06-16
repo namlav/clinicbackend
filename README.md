@@ -1,5 +1,9 @@
+<div align = "center">
+
 # Serene Health - Admin Dashboard
 # [![Nam Lav](https://img.shields.io/badge/Author-Nam_Lav-0D9488?style=for-the-badge&logo=github&logoColor=white)](https://github.com/namlav)
+
+</div>
 
 Trang quản trị (Admin Dashboard) dành cho hệ thống phòng khám **Serene Health**, được xây dựng trên nền tảng **Flutter Web** và sử dụng **Supabase** làm backend (Database & Authentication).
 
@@ -96,5 +100,8 @@ lib/
 ├── widgets/        # Các UI component dùng chung (Sidebar, Card...)
 └── main.dart       # Điểm bắt đầu, thiết lập theme & Supabase
 ```
+<div align = "center">
 
 ## Happy Coding! 🚀
+
+</div>
