@@ -48,6 +48,12 @@ Yêu cầu tạo các thư mục sau trong `lib/`:
 - Hiển thị danh sách từ bảng `users` dưới dạng `DataTable`. (chỉ hiển thị bác sĩ và bệnh nhân)
 - Có nút Khóa/Mở Khóa tài khoản: Gọi lệnh `.update({'isactive': false/true})` vào bảng `users` với `userid` tương ứng. 
 
+### Phase 6: Quản Lý Hóa Đơn (`payment_management_screen.dart`)
+- Hiển thị danh sách từ bảng `payments` dưới dạng `DataTable`. (chỉ hiển thị các hóa đơn có status = 'Success')
+- Có nút Xem chi tiết: Mở một Dialog chứa thông tin chi tiết về hóa đơn.
+- Nút "Sắp xếp": Sắp xếp theo ngày, theo giá tiền, theo trạng thái, theo bác sĩ.
+- Nút "Lọc": Lọc theo ngày, theo giá tiền, theo trạng thái, theo bác sĩ.
+
 ## 5. Quy Tắc Code (Coding Standards)
 - Luôn bọc các câu lệnh gọi API Supabase trong khối `try-catch` và hiển thị `SnackBar` nếu có lỗi.
 - Code UI cần sử dụng các thành phần Material 3 hiện đại, có tính Responsive để tương thích với màn hình Desktop/Laptop.

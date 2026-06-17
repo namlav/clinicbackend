@@ -268,7 +268,7 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getServices() async {
     final response = await client
         .from('services')
-        .select('*')
+        .select('*, specialties(specialtyname)')
         .order('serviceid', ascending: true);
     return List<Map<String, dynamic>>.from(response as List);
   }
@@ -346,5 +346,29 @@ class SupabaseService {
         'Cập nhật trạng thái thất bại. Vui lòng kiểm tra quyền truy cập DB (RLS).',
       );
     }
+  }
+
+  // ─── Payment Methods (Phase 6) ──────────────────────────────────
+
+  /// Fetch all successful payments with related appointment details
+  Future<List<Map<String, dynamic>>> getPaymentsForManagement() async {
+    final response = await client
+        .from('payments')
+        .select('''
+          paymentid,
+          totalamount,
+          status,
+          appointments (
+            appointmentid,
+            appointmentdate,
+            starttime,
+            users (fullname),
+            doctors (fullname),
+            services (servicename, price)
+          )
+        ''')
+        .eq('status', 'Success')
+        .order('paymentid', ascending: false);
+    return List<Map<String, dynamic>>.from(response as List);
   }
 }
