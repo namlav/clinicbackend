@@ -664,9 +664,10 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                                 ),
                               )),
                               DataCell(Text(
-                                svc['specialtyid'] != null
-                                    ? 'Khoa ${svc['specialtyid']}'
-                                    : '—',
+                                (svc['specialties'] as Map<String, dynamic>?)?['specialtyname'] as String? ??
+                                    (svc['specialtyid'] != null
+                                        ? 'Khoa ${svc['specialtyid']}'
+                                        : '—'),
                               )),
                               DataCell(
                                 Container(
